@@ -29,6 +29,7 @@ mkdir ./../../PGDATA
 ```sql
 CREATE DATABASE test_db;
 \c test_db
+```
 ```sql
 -- turn off parallel queries
 alter system set max_parallel_workers_per_gather=0;
