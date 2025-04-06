@@ -1,5 +1,39 @@
 # test_task_performance_engineer
 
+## Установка PostgreSQL 16
+## Запуск скриптов
+Подключаемся к постгресу посредством терминального клиента psql
+```bash
+./psql postgres
+```
+Создаем базу данных и выполняем скрипты генерации
+```sql
+CREATE DATABASE test_db
+\c test_db
+-- turn off parallel queries
+alter system set max_parallel_workers_per_gather=0;
+-- apply changes
+select pg_reload_conf();
+
+-- t1 table has 10e7 rows
+create table if not exists t1 as
+ select a.id as id
+      , cast(a.id - floor( random() *(a.id) ) as integer ) as parent_id
+      , substr( md5( random()::text ), 0, 30 )  as name
+ from generate_series ( 1, 10000000 ) a(id);
+
+-- t2 table has 5*10e6 rows
+create table if not exists t2  as
+select row_number() over() as id
+     , id as t_id
+     , to_char(date_trunc('day', now()- random()*'1 year'::interval),'yyyymmdd') as day
+from t1
+order by random() 
+limit 5000000;
+```
+
+
+## Задачи
 ### Задача №1
 ускорить простой запроc, добиться времени выполнения < 10ms
 ```sql
