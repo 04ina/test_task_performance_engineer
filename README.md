@@ -284,7 +284,26 @@ COMMIT
 # execute long running transaction
 ./psql -d test_db -c 'select txid_current(); select pg_sleep(3600);' &
 # check using pgbench
-pgbench -p 5432 -rn -P1 -c10 -T3600 -M prepared -f ./../../generate_100_subtrans.sql 2>&1 > ./../../generate_100_subtrans_pgbench.log
+./pgbench -p 5432 -rn -P1 -c10 -T3600 -M prepared -f ./../../generate_100_subtrans.sql 2>&1 > ./../../generate_100_subtrans_pgbench.log test_db
+progress: 1.0 s, 0.0 tps, lat 0.000 ms stddev 0.000, 0 failed
+...
+progress: 260.0 s, 1.0 tps, lat 259070.821 ms stddev 0.000, 0 failed
+...
+progress: 275.0 s, 1.0 tps, lat 274601.157 ms stddev 0.000, 0 failed
+...
+progress: 280.0 s, 1.0 tps, lat 279190.790 ms stddev 0.000, 0 failed
+progress: 281.0 s, 1.0 tps, lat 280381.583 ms stddev 0.000, 0 failed
+...
+progress: 285.0 s, 1.0 tps, lat 284644.290 ms stddev 0.000, 0 failed
+progress: 286.0 s, 1.0 tps, lat 285271.281 ms stddev 0.006, 0 failed
+...
+progress: 288.0 s, 1.0 tps, lat 287233.632 ms stddev 0.000, 0 failed
+...
+progress: 290.0 s, 1.0 tps, lat 288977.201 ms stddev 0.006, 0 failed
+progress: 291.0 s, 1.0 tps, lat 289980.133 ms stddev 0.004, 0 failed
+...
+progress: 293.0 s, 1.0 tps, lat 292140.550 ms stddev NaN, 0 failed
+...
 ```
 ###### Решение
 Чтобы ускорить процесс изменения строк, необходимо ускорить процесс их нахождения. Для этого мы опять же можем использовать индекс для столбца t1.id, поскольку поиск изменяемой строки происходит именно по нему. 
