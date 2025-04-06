@@ -3,7 +3,7 @@
 ## Установка PostgreSQL 16.7
 Устанавливать мы постгрес будем путем компиляции из исходников. Это позволит нам воспользоваться отладочными инструментами, если мы встретим "необъяснимое" поведение СУБД при построении планов. 
 
-При компиляции с ключем -O0 большинство оптимизаций производительности при компиляции отключены, что может замедлить исполнение запроса на некое константное время, но не на порядок; поэтому мы все равно уложимся во временные диапазоны скорости исполнения запросов, указанные в задании. 
+При компиляции с ключем -O0 большинство оптимизаций производительности при компиляции отключены, что может замедлить исполнение запроса, но не на порядок; поэтому мы все равно должны уложимся во временные диапазоны скорости исполнения запросов, указанные в задании. 
 
 Примечания:
 1. Пользователя postgres в linux мы создавать не будем, поскольку постгрес нам необходим не для enterprise задач - безопасность нам ни к чему. Вследствие этого суперпользователь у нас будет иметь доступ к PGDATA.
@@ -61,14 +61,12 @@ select name from t1 where id = 50000;
 ###### Почему запрос медленный
 Чтобы найти и вывести нужное нам значение name, постгресу необходимо с помощью полного перебора посредством seq scan найти все строки, id которых равно значению 50000. Поскольку существует всего одна строка с id=50000 (из-за generate_series), использование полного перебора всех строк таблицы t1 неоправдано.
 ```sql
-explain analyze select name from t1 where id = 50000;
-                                             QUERY PLAN                                             
-----------------------------------------------------------------------------------------------------
- Seq Scan on t1  (cost=0.00..294492.00 rows=1 width=30) (actual time=5.268..726.719 rows=1 loops=1)
+explain select name from t1 where id = 50000;
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Seq Scan on t1  (cost=0.00..208480.00 rows=50035 width=32)
    Filter: (id = 50000)
-   Rows Removed by Filter: 9999999
- Planning Time: 0.041 ms
- Execution Time: 726.743 ms
+(2 rows)
 ```
 ###### Решение
 Для увеличения скорости выполнения данного запроса необходимо "навестить" индекс на столбец id. Это позволит производить выборку с высокой селективностью по t1.id значительно быстрее. Для наших целей подойдет как btree, так и hash индексы. 
@@ -76,13 +74,14 @@ explain analyze select name from t1 where id = 50000;
 CREATE INDEX ON t1(id);
 CREATE INDEX
 
-explain analyze select name from t1 where id = 50000;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
- Index Scan using t1_id_idx on t1  (cost=0.43..8.45 rows=1 width=30) (actual time=0.023..0.027 rows=1 loops=1)
+explain (analyze, timing off) select name from t1 where id = 50000;
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Index Scan using t1_id_idx on t1  (cost=0.43..8.45 rows=1 width=30) (actual rows=1 loops=1)
    Index Cond: (id = 50000)
- Planning Time: 0.067 ms
- Execution Time: 0.049 ms
+ Planning Time: 0.124 ms
+ Execution Time: 0.085 ms
+(4 rows)
 ```
 ### Задача №2
 ускорить запрос "max + left join", добиться времени выполнения < 10ms
@@ -92,46 +91,47 @@ select max(t2.day) from t2 left join t1 on t2.t_id = t1.id and t1.name like 'a%'
 ###### Почему запрос медленный
 Данный запрос выполняется медленно вследствие использования соединения, которое, несмотря на предварительную фильтрацию по столбцу t1.name и использование хеш функций, сопутствуется высокими накладными расходами. 
 ```sql
-explain analyze select t2.day from t2 left join t1 on t2.t_id = t1.id and t1.name like 'a%';
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
- Hash Left Join  (cost=304435.76..459286.06 rows=5000000 width=9) (actual time=2750.594..23434.829 rows=5000000 loops=1)
-   Hash Cond: (t2.t_id = t1.id)
-   ->  Seq Scan on t2  (cost=0.00..81872.00 rows=5000000 width=13) (actual time=0.007..6402.769 rows=5000000 loops=1)
-   ->  Hash  (cost=294492.00..294492.00 rows=606061 width=4) (actual time=2750.354..2750.359 rows=625787 loops=1)
-         Buckets: 262144  Batches: 4  Memory Usage: 7553kB
-         ->  Seq Scan on t1  (cost=0.00..294492.00 rows=606061 width=4) (actual time=0.038..1871.625 rows=625787 loops=1)
-               Filter: (name ~~ 'a%'::text)
-               Rows Removed by Filter: 9374213
- Planning Time: 0.199 ms
- Execution Time: 29671.847 ms
+explain select max(t2.day) from t2 left join t1 on t2.t_id = t1.id and t1.name like 'a%';
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Aggregate  (cost=385682.77..385682.78 rows=1 width=32)
+   ->  Hash Left Join  (cost=218335.76..373182.96 rows=4999923 width=9)
+         Hash Cond: (t2.t_id = t1.id)
+         ->  Seq Scan on t2  (cost=0.00..81871.23 rows=4999923 width=13)
+         ->  Hash  (cost=208392.00..208392.00 rows=606061 width=4)
+               ->  Seq Scan on t1  (cost=0.00..208392.00 rows=606061 width=4)
+                     Filter: (name ~~ 'a%'::text)
+(7 rows)
 ```
 ###### Решение
 Нетрудно догадаться, что данный запрос на самом деле не нуждается в левом внешнем соединении -- при любых условиях соединения левая часть результирующего отношения соединения будет состоять из 5000000 значений левого исходного отношения t2, поэтому предикат t1.name like 'a%' может повлиять лишь на правую часть результирующего отношения соединения. Тем временем, значение max(t2.day) может варьироваться только в соответсвтии с левой частью результирующей таблицы соединения -- правая часть для max(t2.day) будет фиктивной. В связи с этим мы можем убрать любое упоминание таблицы t1 и операцию соединения в запросе:
 ```sql
-explain analyze select max(t2.day) from t2;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
- Aggregate  (cost=94420.80..94420.81 rows=1 width=32) (actual time=2572.605..2572.607 rows=1 loops=1)
-   ->  Seq Scan on t2  (cost=0.00..81911.04 rows=5003904 width=9) (actual time=0.089..669.081 rows=5000000 loops=1)
- Planning Time: 0.187 ms
- Execution Time: 2572.664 ms
+explain (analyze, timing off) select max(t2.day) from t2;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Aggregate  (cost=94371.04..94371.05 rows=1 width=32) (actual rows=1 loops=1)
+   ->  Seq Scan on t2  (cost=0.00..81871.23 rows=4999923 width=9) (actual rows=5000000 loops=1)
+ Planning Time: 0.165 ms
+ Execution Time: 1698.118 ms
+(4 rows)
 ``` 
 Чтобы избежать полного перебора и последующей агрегации, навесим индекс на столбец day. Таким образом, seq scan и агрегация будет заменена на сканирование непосредственно из индекса самого первого наибольшего значения:
 ```sql
 CREATE INDEX ON t2(day);
 CREATE INDEX
-explain analyze select max(t2.day) from t2;
-                                                                      QUERY PLAN                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------
- Result  (cost=0.45..0.46 rows=1 width=32) (actual time=0.087..0.089 rows=1 loops=1)
-   InitPlan 1
-     ->  Limit  (cost=0.43..0.45 rows=1 width=9) (actual time=0.079..0.080 rows=1 loops=1)
-           ->  Index Only Scan Backward using t2_day_idx on t2  (cost=0.43..104784.45 rows=5000000 width=9) (actual time=0.076..0.077 rows=1 loops=1)
+
+explain (analyze, timing off) select max(t2.day) from t2;
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
+ Result  (cost=0.45..0.46 rows=1 width=32) (actual rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit  (cost=0.43..0.45 rows=1 width=9) (actual rows=1 loops=1)
+           ->  Index Only Scan Backward using t2_day_idx on t2  (cost=0.43..104780.44 rows=5000000 width=9) (actual rows=1 loops=1)
                  Index Cond: (day IS NOT NULL)
                  Heap Fetches: 0
- Planning Time: 0.256 ms
- Execution Time: 0.133 ms
+ Planning Time: 0.285 ms
+ Execution Time: 0.132 ms
+(8 rows)
 ```
 ### Задача №3
 ускорить запрос "anti-join", добиться времени выполнения < 10sec
@@ -144,11 +144,12 @@ select day from t2 where t_id not in ( select t1.id from t1 );
 explain select day from t2 where t_id not in ( select t1.id from t1 );
                                  QUERY PLAN                                 
 ----------------------------------------------------------------------------
- Seq Scan on t2  (cost=0.00..958887594372.00 rows=2500000 width=9)
+ Seq Scan on t2  (cost=0.00..743637594372.00 rows=2500000 width=9)
    Filter: (NOT (SubPlan 1))
    SubPlan 1
-     ->  Materialize  (cost=0.00..358555.00 rows=10000000 width=4)
-           ->  Seq Scan on t1  (cost=0.00..269492.00 rows=10000000 width=4)
+     ->  Materialize  (cost=0.00..272455.00 rows=10000000 width=4)
+           ->  Seq Scan on t1  (cost=0.00..183392.00 rows=10000000 width=4)
+(5 rows)
 ```
 ###### Решение
 Семантика запроса подразумевает, что мы должны должны вывести значения t2.day всех строк таблицы t2, соответствующие значения t2.t_id которых не равны значениям t1.id ни одной строки из таблицы t1. Причем в результирующем отношении должны быть значения лишь из одной таблицы t2. Таким образом, этот запрос можно значительно улучшить, если воспользоваться конструкцией anti-join с использованием NOT EXISTS. 
@@ -156,14 +157,15 @@ explain select day from t2 where t_id not in ( select t1.id from t1 );
 explain (analyze,timing off) SELECT day FROM t2 WHERE NOT EXISTS (SELECT * FROM t1 WHERE t1.id = t2.t_id);
                                               QUERY PLAN                                               
 -------------------------------------------------------------------------------------------------------
- Hash Right Anti Join  (cost=168787.00..678320.00 rows=1 width=9) (actual rows=0 loops=1)
+ Hash Right Anti Join  (cost=168787.00..592220.00 rows=1 width=9) (actual rows=0 loops=1)
    Hash Cond: (t1.id = t2.t_id)
-   ->  Seq Scan on t1  (cost=0.00..269492.00 rows=10000000 width=4) (actual rows=10000000 loops=1)
+   ->  Seq Scan on t1  (cost=0.00..183392.00 rows=10000000 width=4) (actual rows=10000000 loops=1)
    ->  Hash  (cost=81872.00..81872.00 rows=5000000 width=13) (actual rows=5000000 loops=1)
-         Buckets: 262144  Batches: 64  Memory Usage: 5724kB
+         Buckets: 262144  Batches: 64  Memory Usage: 5720kB
          ->  Seq Scan on t2  (cost=0.00..81872.00 rows=5000000 width=13) (actual rows=5000000 loops=1)
- Planning Time: 0.095 ms
- Execution Time: 5155.374 ms
+ Planning Time: 0.177 ms
+ Execution Time: 9385.418 ms
+(8 rows)
 ```
 Соединение по хешу с модификацией anti-join позволит за кратчайшее время выявить строки таблицы t2, для которых не было найдено ни одно соответствия из таблицы t1.
 
@@ -172,14 +174,15 @@ explain (analyze,timing off) SELECT day FROM t2 WHERE NOT EXISTS (SELECT * FROM 
 explain (analyze, timing off) SELECT t2.day FROM t2 LEFT JOIN t1 ON t2.t_id = t1.id WHERE t1.id IS NULL;
                                               QUERY PLAN                                               
 -------------------------------------------------------------------------------------------------------
- Hash Right Anti Join  (cost=168787.00..678320.00 rows=1 width=9) (actual rows=0 loops=1)
+ Hash Right Anti Join  (cost=168787.00..592220.00 rows=1 width=9) (actual rows=0 loops=1)
    Hash Cond: (t1.id = t2.t_id)
-   ->  Seq Scan on t1  (cost=0.00..269492.00 rows=10000000 width=4) (actual rows=10000000 loops=1)
+   ->  Seq Scan on t1  (cost=0.00..183392.00 rows=10000000 width=4) (actual rows=10000000 loops=1)
    ->  Hash  (cost=81872.00..81872.00 rows=5000000 width=13) (actual rows=5000000 loops=1)
-         Buckets: 262144  Batches: 64  Memory Usage: 5724kB
+         Buckets: 262144  Batches: 64  Memory Usage: 5720kB
          ->  Seq Scan on t2  (cost=0.00..81872.00 rows=5000000 width=13) (actual rows=5000000 loops=1)
- Planning Time: 0.084 ms
- Execution Time: 5167.781 ms
+ Planning Time: 0.204 ms
+ Execution Time: 9493.130 ms
+(8 rows)
 ```
 ### Задача №4
 ускорить запрос "semi-join", добиться времени выполнения < 10sec
@@ -192,11 +195,12 @@ select day from t2 where t_id in ( select t1.id from t1 where t2.t_id = t1.id) a
 explain select day from t2 where t_id in ( select t1.id from t1 where t2.t_id = t1.id) and day > to_char(date_trunc('day',now()- '1 months'::interval),'yyyymmdd');
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Seq Scan on t2  (cost=0.00..736230163122.00 rows=384294 width=9)
+ Seq Scan on t2  (cost=0.00..520980163122.00 rows=419993 width=9)
    Filter: ((day > to_char(date_trunc('day'::text, (now() - '1 mon'::interval)), 'yyyymmdd'::text)) AND (SubPlan 1))
    SubPlan 1
-     ->  Seq Scan on t1  (cost=0.00..294492.00 rows=1 width=4)
+     ->  Seq Scan on t1  (cost=0.00..208392.00 rows=1 width=4)
            Filter: (t2.t_id = id)
+(5 rows)
 ```
 ###### Решение
 Чтобы ускорить исполнение данного запроса, мы должны воспользоваться соединением с модификацией semi-join. Для этого нам необходимо вместо выражения IN воспользоваться выражением EXISTS. В данном случае они будут эквивалентны, поскольку внутренний запрос всегда будет иметь хотя бы одну результирующую строку, если для какого-либо t1.id будет найден равный t2.t_id. В свою очередь, фильтрация по "временному" условию сместится на этап последовательного сканирования. 
@@ -235,8 +239,53 @@ explain (analyze, timing off) select day from t2 where t_id in ( select t1.id fr
 ```
 ### Задача №5
 ускорить работу "savepoint + update", добиться постоянной во времени производительности (число транзакций в секунду)
+
+Подготавливаем все для теста "savepoint + update" скрипта
+```sql
+./psql -d test_db -X -q <<'EOF'
+create or replace function random(left bigint, right bigint) returns bigint
+as $$
+ select trunc(random.left + random()*(random.right - random.left))::bigint;
+$$                                                
+language sql;
+EOF
+```
+```sql
+./psql -d test_db -X -q > ./../../generate_100_subtrans.sql <<EOF
+select '\\set id random(1,10000000)'
+union all
+select 'BEGIN;'
+union all
+select 'savepoint v' || v.id || ';'                || E'\n' 
+    || 'update t1 set name = name where id = :id;' || E'\n'
+from generate_series(1,100) v(id)
+union all
+select E'COMMIT;\n' \g (tuples_only=true format=unaligned)
+EOF
+```
+Проверяем работоспособность скрипта:
+```sql
+ ./psql -d test_db < ./../../generate_100_subtrans.sql > ./../../generate_100_subtrans.lst
+tail ./../../generate_100_subtrans.lst 
+UPDATE 1
+SAVEPOINT
+UPDATE 1
+SAVEPOINT
+UPDATE 1
+SAVEPOINT
+UPDATE 0
+SAVEPOINT
+UPDATE 0
+COMMIT
+```
 ###### Почему запрос медленный
 Поскольку в таблице t1 изначально много строк, для изменения конкретной необходимо перебрать абсолютно все таплы, что крайне отрицательно сказывается на скорости обновления. 
+```sql
+# execute long running transaction
+./psql -d test_db -c 'select txid_current(); select pg_sleep(3600);' &
+# check using pgbench
+pgbench -p 5432 -rn -P1 -c10 -T3600 -M prepared -f ./../../generate_100_subtrans.sql 2>&1 > ./../../generate_100_subtrans_pgbench.log
+```
 ###### Решение
 Чтобы ускорить процесс изменения строк, необходимо ускорить процесс их нахождения. Для этого мы опять же можем использовать индекс для столбца t1.id, поскольку поиск изменяемой строки происходит именно по нему. 
 ```sql
@@ -258,4 +307,4 @@ progress: 9.0 s, 630.0 tps, lat 15.867 ms stddev 2.905, 0 failed
 progress: 10.0 s, 635.0 tps, lat 15.707 ms stddev 1.814, 0 failed
 progress: 11.0 s, 641.0 tps, lat 15.636 ms stddev 2.029, 0 failed
 ```
-Стоит отметить, что, навесив индекс, мы не сможем выполнять hot очистку, вследствие чего наша таблица подвержена более активному процессу "разбухания".
+Стоит отметить, что, навесив индекс, мы не сможем выполнять hot очистку, вследствие чего наша таблица подвержена процессу "разбухания" более активно.
