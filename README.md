@@ -313,17 +313,20 @@ CREATE INDEX
 ```
 Таким образом мы улучшим скорость обновления строк
 ```sql
-./pgbench -p 5432 -rn -P1 -c10 -T3600 -M prepared -f generate_100_subtrans.sql 2>&1 > generate_100_subtrans_pgbench.log test_db2
-progress: 1.0 s, 552.0 tps, lat 17.595 ms stddev 11.975, 0 failed
-progress: 2.0 s, 631.0 tps, lat 15.811 ms stddev 2.074, 0 failed
-progress: 3.0 s, 634.0 tps, lat 15.724 ms stddev 2.003, 0 failed
-progress: 4.0 s, 626.0 tps, lat 15.943 ms stddev 3.125, 0 failed
-progress: 5.0 s, 637.0 tps, lat 15.709 ms stddev 2.076, 0 failed
-progress: 6.0 s, 642.0 tps, lat 15.594 ms stddev 1.965, 0 failed
-progress: 7.0 s, 635.0 tps, lat 15.632 ms stddev 2.059, 0 failed
-progress: 8.0 s, 642.0 tps, lat 15.616 ms stddev 1.917, 0 failed
-progress: 9.0 s, 630.0 tps, lat 15.867 ms stddev 2.905, 0 failed
-progress: 10.0 s, 635.0 tps, lat 15.707 ms stddev 1.814, 0 failed
-progress: 11.0 s, 641.0 tps, lat 15.636 ms stddev 2.029, 0 failed
+# execute long running transaction
+./psql -d test_db -c 'select txid_current(); select pg_sleep(3600);' &
+# check using pgbench
+./pgbench -p 5432 -rn -P1 -c10 -T3600 -M prepared -f ./../../generate_100_subtrans.sql 2>&1 > ./../../generate_100_subtrans_pgbench.log test_db
+progress: 1.0 s, 235.0 tps, lat 40.239 ms stddev 41.020, 0 failed
+progress: 2.0 s, 327.0 tps, lat 30.339 ms stddev 2.787, 0 failed
+progress: 3.0 s, 364.0 tps, lat 27.786 ms stddev 3.005, 0 failed
+progress: 4.0 s, 381.0 tps, lat 26.181 ms stddev 2.172, 0 failed
+progress: 5.0 s, 382.0 tps, lat 26.061 ms stddev 2.324, 0 failed
+progress: 6.0 s, 390.0 tps, lat 25.662 ms stddev 2.328, 0 failed
+progress: 7.0 s, 384.0 tps, lat 25.996 ms stddev 2.183, 0 failed
+progress: 8.0 s, 382.0 tps, lat 26.170 ms stddev 2.073, 0 failed
+progress: 9.0 s, 454.0 tps, lat 22.213 ms stddev 2.791, 0 failed
+progress: 10.0 s, 470.0 tps, lat 21.125 ms stddev 6.990, 0 failed
+progress: 11.0 s, 463.9 tps, lat 21.465 ms stddev 7.079, 0 failed
 ```
 Стоит отметить, что, навесив индекс, мы не сможем выполнять hot очистку, вследствие чего наша таблица подвержена процессу "разбухания" более активно.
