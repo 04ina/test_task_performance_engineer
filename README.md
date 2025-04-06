@@ -317,16 +317,16 @@ CREATE INDEX
 ./psql -d test_db -c 'select txid_current(); select pg_sleep(3600);' &
 # check using pgbench
 ./pgbench -p 5432 -rn -P1 -c10 -T3600 -M prepared -f ./../../generate_100_subtrans.sql 2>&1 > ./../../generate_100_subtrans_pgbench.log test_db
-progress: 1.0 s, 235.0 tps, lat 40.239 ms stddev 41.020, 0 failed
-progress: 2.0 s, 327.0 tps, lat 30.339 ms stddev 2.787, 0 failed
-progress: 3.0 s, 364.0 tps, lat 27.786 ms stddev 3.005, 0 failed
-progress: 4.0 s, 381.0 tps, lat 26.181 ms stddev 2.172, 0 failed
-progress: 5.0 s, 382.0 tps, lat 26.061 ms stddev 2.324, 0 failed
-progress: 6.0 s, 390.0 tps, lat 25.662 ms stddev 2.328, 0 failed
-progress: 7.0 s, 384.0 tps, lat 25.996 ms stddev 2.183, 0 failed
-progress: 8.0 s, 382.0 tps, lat 26.170 ms stddev 2.073, 0 failed
-progress: 9.0 s, 454.0 tps, lat 22.213 ms stddev 2.791, 0 failed
-progress: 10.0 s, 470.0 tps, lat 21.125 ms stddev 6.990, 0 failed
-progress: 11.0 s, 463.9 tps, lat 21.465 ms stddev 7.079, 0 failed
+progress: 1.0 s, 428.0 tps, lat 22.515 ms stddev 17.493, 0 failed
+progress: 2.0 s, 529.0 tps, lat 18.831 ms stddev 1.575, 0 failed
+progress: 3.0 s, 517.0 tps, lat 19.362 ms stddev 1.766, 0 failed
+progress: 4.0 s, 518.0 tps, lat 19.292 ms stddev 2.734, 0 failed
+progress: 5.0 s, 534.0 tps, lat 18.754 ms stddev 1.394, 0 failed
+progress: 6.0 s, 534.0 tps, lat 18.722 ms stddev 1.406, 0 failed
+progress: 7.0 s, 533.0 tps, lat 18.732 ms stddev 1.351, 0 failed
+progress: 8.0 s, 531.0 tps, lat 18.799 ms stddev 1.437, 0 failed
+progress: 9.0 s, 525.0 tps, lat 19.010 ms stddev 5.338, 0 failed
+progress: 10.0 s, 535.0 tps, lat 18.750 ms stddev 1.285, 0 failed
+progress: 11.0 s, 529.0 tps, lat 18.803 ms stddev 1.397, 0 failed
 ```
 Стоит отметить, что, навесив индекс, мы не сможем выполнять hot очистку, вследствие чего наша таблица подвержена процессу "разбухания" более активно.
