@@ -317,20 +317,55 @@ CREATE INDEX
 ./psql -d test_db -c 'select txid_current(); select pg_sleep(3600);' &
 # check using pgbench
 ./pgbench -p 5432 -rn -P1 -c10 -T3600 -M prepared -f ./../../generate_100_subtrans.sql 2>&1 > ./../../generate_100_subtrans_pgbench.log test_db
-progress: 1.0 s, 428.0 tps, lat 22.515 ms stddev 17.493, 0 failed
-progress: 2.0 s, 529.0 tps, lat 18.831 ms stddev 1.575, 0 failed
-progress: 3.0 s, 517.0 tps, lat 19.362 ms stddev 1.766, 0 failed
-progress: 4.0 s, 518.0 tps, lat 19.292 ms stddev 2.734, 0 failed
-progress: 5.0 s, 534.0 tps, lat 18.754 ms stddev 1.394, 0 failed
-progress: 6.0 s, 534.0 tps, lat 18.722 ms stddev 1.406, 0 failed
-progress: 7.0 s, 533.0 tps, lat 18.732 ms stddev 1.351, 0 failed
-progress: 8.0 s, 531.0 tps, lat 18.799 ms stddev 1.437, 0 failed
-progress: 9.0 s, 525.0 tps, lat 19.010 ms stddev 5.338, 0 failed
-progress: 10.0 s, 535.0 tps, lat 18.750 ms stddev 1.285, 0 failed
-progress: 11.0 s, 529.0 tps, lat 18.803 ms stddev 1.397, 0 failed
+progress: 1.0 s, 418.0 tps, lat 22.920 ms stddev 17.083, 0 failed
+progress: 2.0 s, 519.0 tps, lat 19.241 ms stddev 1.466, 0 failed
+progress: 3.0 s, 528.0 tps, lat 18.982 ms stddev 1.578, 0 failed
+progress: 4.0 s, 527.0 tps, lat 18.940 ms stddev 1.412, 0 failed
+progress: 5.0 s, 516.0 tps, lat 19.359 ms stddev 2.905, 0 failed
+progress: 6.0 s, 527.0 tps, lat 18.985 ms stddev 1.529, 0 failed
+progress: 7.0 s, 524.0 tps, lat 19.041 ms stddev 1.540, 0 failed
+progress: 8.0 s, 520.0 tps, lat 19.171 ms stddev 1.239, 0 failed
+progress: 9.0 s, 518.0 tps, lat 19.320 ms stddev 1.415, 0 failed
+progress: 10.0 s, 514.0 tps, lat 19.460 ms stddev 3.016, 0 failed
+...
+progress: 634.0 s, 311.0 tps, lat 29.666 ms stddev 49.570, 0 failed
+progress: 635.0 s, 297.0 tps, lat 34.681 ms stddev 63.307, 0 failed
+progress: 636.0 s, 371.0 tps, lat 28.183 ms stddev 41.036, 0 failed
+progress: 637.0 s, 338.0 tps, lat 27.619 ms stddev 33.601, 0 failed
+progress: 638.0 s, 197.0 tps, lat 46.498 ms stddev 98.825, 0 failed
+progress: 639.0 s, 284.0 tps, lat 40.791 ms stddev 77.701, 0 failed
+progress: 640.0 s, 267.0 tps, lat 37.872 ms stddev 71.533, 0 failed
 ```
+Создание индекса значительно увеличивает tps, однако мы еще не добились постоянной во времени производительности из-за возможного эффекта разбухания таблицы t1 по мере обновления строк. Чем больше у нас будет мертвых строк, тем медленнее будет происходить процесс обновления. Как правило для решения данной задачи необходимо должным образом настроить autovacuum, чтобы успевать очищать старые версии строк по мере их поступления. Чтобы упростить работу autovacuum-у, мы можем воспользоваться механизмом внутристраничной очистки, посольку обновление идет не по индексируемому столбцу t1.id. Для этого установим fillfactor в 50.
 
-Создание индекса значительно увеличивает tps, однако мы еще не добились постоянной во времени производительности из-за возможного эффекта разбухания таблицы t1 по мере обновления строк. Чем больше у нас будет мертвых строк, тем медленнее будет происходить процесс обновления. Как правило для решения данной ситуации необходимо воспользоваться механизмом HOT-обновлений, а для этого нужно грамотно настроить автовакуум и fillfactor таблицы, однако с последним возникает некоторая неоднозначность. Как мы знаем, скрипт generate_100_subtrans.sql исполняет 100 одинаковых обновлений одной и той же строки в пределах одной транзакции. Тем временем, с помощью расширения pageinspect нетрудно выявить, что один тапл занимает 64 байта. Для этого необходимо всего лишь выполнить при fillfactor = 100 пару обновлений и вычислить разницу в изменении upper значения заголовка страницы (последнюю страницу можно выявлить с помощью pg_class):
+ALTER SYSTEM SET autovacuum TO 'on';
+
+ALTER SYSTEM SET autovacuum_work_mem = '256MB';
+ALTER SYSTEM SET autovacuum_naptime TO '5s';  
+ALTER SYSTEM SET autovacuum_max_workers TO 6;
+
+ALTER TABLE t1 SET (
+    autovacuum_vacuum_scale_factor = 0,
+    autovacuum_vacuum_threshold = 50,
+    autovacuum_vacuum_cost_limit = 6000,
+    autovacuum_vacuum_cost_delay = 1,
+    fillfactor = 50
+);
+
+SELECT pg_reload_conf();
+
+
+
+установим fillfactor 
+
+воспользоваться 
+
+механизмом HOT-обновлений, а для этого нужно грамотно настроить автовакуум и fillfactor таблицы, однако с последним возникает некоторая неоднозначность. 
+
+
+
+
+Как мы знаем, скрипт generate_100_subtrans.sql исполняет 100 одинаковых обновлений одной и той же строки в пределах одной транзакции. Тем временем, с помощью расширения pageinspect нетрудно выявить, что один тапл занимает 64 байта. Для этого необходимо всего лишь выполнить при fillfactor = 100 пару обновлений и вычислить разницу в изменении upper значения заголовка страницы (последнюю страницу можно выявлить с помощью pg_class):
 
 Таким образом, чтобы все 100 новых версий одного тапла поместились в одной странице, нам необходим следующий fillfactor:
 ```math
@@ -365,7 +400,7 @@ progress: 11.0 s, 529.0 tps, lat 18.803 ms stddev 1.397, 0 failed
 
 ALTER SYSTEM SET autovacuum TO 'on';
 
-ALTER SYSTEM SET autovacuum_vacuum_cost_delay TO '5ms';
+
 ALTER SYSTEM SET autovacuum_naptime TO '5s';   
 ALTER SYSTEM SET autovacuum_vacuum_cost_limit = 2000;
 ALTER SYSTEM SET autovacuum_max_workers = 6; 
@@ -378,7 +413,16 @@ ALTER TABLE t1 SET (
 
 
 ALTER TABLE t1 SET (
-    fillfactor = 30
+    fillfactor = 10
+);
+
+ALTER TABLE t1 SET (
+    fillfactor = 18
+);
+
+
+ALTER TABLE t1 SET (
+    fillfactor = 100
 );
 
 VACUUM FULL t1;
@@ -389,5 +433,25 @@ SELECT
     (n_tup_upd - n_tup_hot_upd) AS a           
 FROM pg_stat_user_tables
 WHERE relname = 'users';
+
+
+
+
+ALTER SYSTEM SET autovacuum TO 'on';
+
+ALTER SYSTEM SET autovacuum_work_mem = '256MB';
+ALTER SYSTEM SET autovacuum_vacuum_cost_limit = 2000;
+ALTER SYSTEM SET autovacuum_vacuum_cost_delay TO '5ms';
+ALTER SYSTEM SET autovacuum_naptime TO '5s';   
+ALTER TABLE t1 SET (
+    fillfactor = 50,
+    autovacuum_vacuum_threshold = 50,
+    autovacuum_vacuum_scale_factor = 0, 
+    autovacuum_vacuum_cost_limit = 4000 
+);
+
+
+
+
 
 
