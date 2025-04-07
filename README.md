@@ -338,11 +338,11 @@ progress: 11.0 s, 529.0 tps, lat 18.803 ms stddev 1.397, 0 failed
 ```
 
 ```math
-\mbox{fillfactor} = \frac{\mbox{tuple_size} \cdot n}{8192 - 28 - 4 \cdot n}
+\mbox{fillfactor} = 100 - \frac{\mbox{tuple\_size} \cdot n}{8192 - 28 - 4 \cdot n} \cdot
 ```
 В нашем случае n = 100, а tuple_size = 64.
 ```math
-\mbox{fillfactor} = 100 - \frac{64 \cdot 100}{8192 - 28 - 4 \cdot 100} \cdot 100 = 100 - 82.4 \approx 17
+\mbox{fillfactor} = 100 - \frac{64 \cdot 100}{8192 - 28 - 4 \cdot 100} \cdot 100 = 100 - 82,4317362 = 17,5682638 \approx 17
 ```
 
 
