@@ -340,17 +340,17 @@ progress: 640.0 s, 267.0 tps, lat 37.872 ms stddev 71.533, 0 failed
 
 ALTER SYSTEM SET autovacuum TO 'on';
 
-ALTER SYSTEM SET autovacuum_work_mem = '256MB';
-ALTER SYSTEM SET autovacuum_naptime TO '5s';  
-ALTER SYSTEM SET autovacuum_max_workers TO 6;
+ALTER SYSTEM SET autovacuum_work_mem = '4GB';
+ALTER SYSTEM SET autovacuum_naptime TO '1s';  
+ALTER SYSTEM SET autovacuum_max_workers TO 3;
+ALTER SYSTEM SET autovacuum_vacuum_cost_delay = '1ms';
 
 ALTER TABLE t1 SET (
-    autovacuum_vacuum_scale_factor = 0,
-    autovacuum_vacuum_threshold = 50,
-    autovacuum_vacuum_cost_limit = 6000,
-    autovacuum_vacuum_cost_delay = 1,
-    fillfactor = 50
+    autovacuum_vacuum_cost_limit = 10000,
+    autovacuum_vacuum_scale_factor = 0.00001,
+    fillfactor = 18
 );
+
 
 SELECT pg_reload_conf();
 
