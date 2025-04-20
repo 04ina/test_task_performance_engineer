@@ -383,6 +383,19 @@ SELECT pg_terminate_backend(157699);
 
 Теперь автовакуум сможет исполнять очистку таблицы от старых таплов. Также очистка будет происходить благодаря hot-обновлению
 
+```bash
+progress: 1.0 s, 118.0 tps, lat 78.371 ms stddev 95.898, 0 failed
+progress: 2.0 s, 240.0 tps, lat 41.680 ms stddev 4.020, 0 failed
+progress: 3.0 s, 233.0 tps, lat 42.851 ms stddev 5.128, 0 failed
+progress: 4.0 s, 246.0 tps, lat 40.531 ms stddev 3.452, 0 failed
+progress: 5.0 s, 288.0 tps, lat 35.002 ms stddev 4.566, 0 failed
+...
+progress: 1651.0 s, 342.0 tps, lat 29.199 ms stddev 9.717, 0 failed
+progress: 1652.0 s, 354.0 tps, lat 28.483 ms stddev 9.754, 0 failed
+progress: 1653.0 s, 329.0 tps, lat 30.103 ms stddev 9.222, 0 failed
+progress: 1654.0 s, 341.0 tps, lat 29.299 ms stddev 10.677, 0 failed
+progress: 1655.0 s, 348.0 tps, lat 28.586 ms stddev 10.500, 0 failed
+```
 
 
 
